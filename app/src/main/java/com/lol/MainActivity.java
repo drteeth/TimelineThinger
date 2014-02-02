@@ -68,7 +68,7 @@ public class MainActivity extends Activity implements Observer<Timeline> {
         });
 
         // when a list of events comes in, partition them into past and future and emit a timeline
-        Observable<Timeline> timeline = eventsWithReadInfo.flatMap(new Func1<List<Event>, Observable<Timeline>>() {
+        Observable<Timeline> timeline = events.flatMap(new Func1<List<Event>, Observable<Timeline>>() {
             @Override
             public Observable<Timeline> call(final List<Event> events) {
                 return Observable.create(new Observable.OnSubscribeFunc<Timeline>() {
@@ -87,7 +87,7 @@ public class MainActivity extends Activity implements Observer<Timeline> {
                             }
                         }
                         observer.onNext(new Timeline(pastEvents, newEvents));
-                        observer.onCompleted();
+//                        observer.onCompleted();
                         return Subscriptions.empty();
                     }
                 });
@@ -113,6 +113,7 @@ public class MainActivity extends Activity implements Observer<Timeline> {
     @Override
     public void onNext(Timeline timeline) {
         Log.i("meow", "updating ui");
+        Log.i("meow", String.format("first event: %s", timeline.pastEvents.get(0)));
         adapter.clear();
         adapter.addAll(timeline.pastEvents);
         adapter.notifyDataSetChanged();
