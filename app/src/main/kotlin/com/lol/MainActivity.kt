@@ -31,7 +31,7 @@ public open class MainActivity : Activity(), Observer<Set<Event>> {
         val events = Observable.timer(0, 15, TimeUnit.SECONDS)
         ?.flatMap { Api().events() } // map each tick to an api call.
         ?.filter { it?.occursAt?.isBeforeNow() } // filter out future events
-        ?.scan(TreeSet<Event>(), {(es: TreeSet<Event>?, e: Event?) -> if (e != null) es?.add(e as Event); es }) // do a bunch of kotlin bookkeeping and put the event in the set
+        ?.scan(TreeSet<Event>(), {(events, e) -> if (e != null) events?.add(e as Event); events }) // do a bunch of kotlin bookkeeping and put the event in the set
         ?.debounce(1, TimeUnit.SECONDS) // don't flood the UI with udpates
 
         // activity lifecycle aware observable, will subscribe on a thread pool and observe on the ui thread
