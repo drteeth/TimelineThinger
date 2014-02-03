@@ -14,7 +14,7 @@ import android.util.Log
 import rx.android.observables.AndroidObservable
 import rx.Subscription
 
-public open class MainActivity : Activity(), Observer<Set<Event>> {
+public open class MainActivity : Activity() {
     private var adapter: ArrayAdapter<Event>? = null
     private var observableTimeline: Observable<TreeSet<Event>>? = null
     private var subscription: Subscription? = null
@@ -40,7 +40,7 @@ public open class MainActivity : Activity(), Observer<Set<Event>> {
 
     override fun onResume() {
         super<Activity>.onResume()
-        subscription = observableTimeline?.subscribe(this)
+        subscription = subscribe()
     }
 
     override fun onPause() {
@@ -48,19 +48,16 @@ public open class MainActivity : Activity(), Observer<Set<Event>> {
         super<Activity>.onPause()
     }
 
-    override fun onNext(events: Set<Event>?) {
-        Log.i("meow", "updating ui")
-        adapter?.clear()
-        adapter?.addAll(events)
-        adapter?.notifyDataSetChanged()
+    fun subscribe(): Subscription? {
+        return observableTimeline?.subscribe(
+                onNext = {
+                    adapter?.clear()
+                    adapter?.addAll(it)
+                    adapter?.notifyDataSetChanged()
+                },
+                onError = {
+                    Log.e("meow", Log.getStackTraceString(it))
+                }
+        )
     }
-
-    override fun onCompleted() {
-        Log.i("meow", "complete.")
-    }
-
-    override fun onError(error: Throwable?) {
-        Log.e("meow", Log.getStackTraceString(error))
-    }
-
 }
