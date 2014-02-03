@@ -48,10 +48,10 @@ public class Api {
         });
     }
 
-    public Observable<List<Event>> events() {
-        return Observable.create(new Observable.OnSubscribeFunc<List<Event>>() {
+    public Observable<Event> events() {
+        return Observable.create(new Observable.OnSubscribeFunc<Event>() {
             @Override
-            public Subscription onSubscribe(Observer<? super List<Event>> observer) {
+            public Subscription onSubscribe(Observer<? super Event> observer) {
                 try {
                     // TODO: 304s
                     Log.i("meow", "calling api");
@@ -66,7 +66,9 @@ public class Api {
 
                     Log.i("meow", "parsing events");
                     List<Event> events = gson.fromJson(body, type);
-                    observer.onNext(events);
+                    for (Event e : events) {
+                        observer.onNext(e);
+                    }
                     observer.onCompleted();
                     conn.disconnect();
                 } catch (MalformedURLException e) {

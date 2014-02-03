@@ -8,27 +8,24 @@ import android.widget.ArrayAdapter;
 import android.widget.ListView;
 
 import com.lol.boring.Event;
-import com.lol.boring.Timeline;
-import com.lol.boring.UserInfo;
-
-import org.joda.time.DateTime;
 
 import java.util.ArrayList;
-import java.util.List;
+import java.util.Set;
+import java.util.TreeSet;
 import java.util.concurrent.TimeUnit;
 
 import rx.Observable;
 import rx.Observer;
 import rx.Subscription;
-import rx.android.observables.AndroidObservable;
-import rx.subscriptions.Subscriptions;
 import rx.util.functions.Func1;
 import rx.util.functions.Func2;
 
-public class MainActivity extends Activity implements Observer<Timeline> {
+import static rx.android.observables.AndroidObservable.fromActivity;
+
+public class MainActivity extends Activity implements Observer<Set<Event>> {
 
     private Adapter adapter;
-    private Observable<Timeline> timeline;
+    private Observable<Set<Event>> observableTimeline;
     private Subscription subscription;
 
     @Override
@@ -40,68 +37,37 @@ public class MainActivity extends Activity implements Observer<Timeline> {
         adapter = new Adapter(this);
         eventList.setAdapter(adapter);
 
-        // create a recurring ticker
-        Observable<Long> ticker = Observable.timer(0, 15, TimeUnit.SECONDS);
+        // create an observable set of current events every 15s
+        Observable<Set<Event>> events = Observable.timer(0, 15, TimeUnit.SECONDS)
+                // map ticks into api calls
+                .flatMap(new Func1<Long, Observable<Event>>() {
+                    @Override public Observable<Event> call(Long requestId) {
+                        Log.i("meow", "fetching events");
+                        Api api = new Api();
+                        return api.events();
+                    }})
+                // filter out future events
+                .filter(new Func1<Event, Boolean>() {
+                    @Override public Boolean call(Event event) {
+                        return event.occursAt.isBeforeNow();
+                    }})
+                // cram events into a sorted set
+                .scan(new TreeSet<Event>(), new Func2<Set<Event>, Event, Set<Event>>() {
+                    @Override public Set<Event> call(Set<Event> events, Event event) {
+                        events.add(event);
+                        return events;
+                    }})
+                // don't flood the UI with updates
+                .debounce(1, TimeUnit.SECONDS);
 
-        // map each of those ticks to an api request
-        Observable<List<Event>> events = ticker.flatMap(new Func1<Long, Observable<List<Event>>>() {
-            @Override
-            public Observable<List<Event>> call(Long requestId) {
-                Log.i("meow", "fetching events");
-                Api api = new Api();
-                return api.events();
-            }
-        });
-
-        // load the user info from disk
-        Observable<UserInfo> userInfo = new Api().userInfo(this);
-
-        // i'm not sure this work 100% like i expect, but when the user info and the network calls complete, combine the two
-        Observable<List<Event>> eventsWithReadInfo = events.zip(userInfo, new Func2<List<Event>, UserInfo, List<Event>>() {
-            @Override
-            public List<Event> call(List<Event> events, UserInfo user) {
-                for (Event e : events) {
-                    e.read = user.hasRead(e.id);
-                }
-                return events;
-            }
-        });
-
-        // when a list of events comes in, partition them into past and future and emit a timeline
-        Observable<Timeline> timeline = events.flatMap(new Func1<List<Event>, Observable<Timeline>>() {
-            @Override
-            public Observable<Timeline> call(final List<Event> events) {
-                return Observable.create(new Observable.OnSubscribeFunc<Timeline>() {
-                    @Override
-                    public Subscription onSubscribe(Observer<? super Timeline> observer) {
-                        Log.i("meow", "partitioning events");
-                        final List<Event> newEvents = new ArrayList<Event>();
-                        final List<Event> pastEvents = new ArrayList<Event>();
-                        final DateTime fakeLastSeenTime = DateTime.now();
-
-                        for (Event e : events) {
-                            if (e.occursAt.isAfter(fakeLastSeenTime)) {
-                                newEvents.add(e);
-                            } else {
-                                pastEvents.add(e);
-                            }
-                        }
-                        observer.onNext(new Timeline(pastEvents, newEvents));
-//                        observer.onCompleted();
-                        return Subscriptions.empty();
-                    }
-                });
-            }
-        });
-
-        // create an observable timeline that can deal with an activity's lifecycle
-        this.timeline = AndroidObservable.fromActivity(this, timeline);
+        // activity lifecycle aware observable
+        observableTimeline = fromActivity(this, events);
     }
 
     @Override protected void onResume() {
         super.onResume();
         Log.i("meow", "subscribing to event stream");
-        subscription = timeline.subscribe(this);
+        subscription = observableTimeline.subscribe(this);
     }
 
     @Override protected void onPause() {
@@ -111,17 +77,16 @@ public class MainActivity extends Activity implements Observer<Timeline> {
     }
 
     @Override
-    public void onNext(Timeline timeline) {
-        Log.i("meow", "updating ui");
-        Log.i("meow", String.format("first event: %s", timeline.pastEvents.get(0)));
+    public void onNext(Set<Event> events) {
+        Log.i("meow", "updating ui" + events.size());
         adapter.clear();
-        adapter.addAll(timeline.pastEvents);
+        adapter.addAll(events);
         adapter.notifyDataSetChanged();
     }
 
     @Override
     public void onCompleted() {
-        // won't ever happen.
+        // shouldn't ever happen.
         Log.i("meow", "done.");
     }
 
